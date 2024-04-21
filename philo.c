@@ -6,7 +6,7 @@
 /*   By: mminet <mminet@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/04/18 12:54:38 by mminet            #+#    #+#             */
-/*   Updated: 2024/04/18 18:31:03 by mminet           ###   ########.fr       */
+/*   Updated: 2024/04/21 22:32:11 by mminet           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,8 +38,13 @@ int	check_num(char **av)
 
 int	parse(int ac, char **av, t_philos *philos)
 {
+	struct timeval tmp;
+
+	gettimeofday(&tmp, NULL);
+	philos->start = to_milisecond(tmp.tv_sec, tmp.tv_usec, 0);
 	if (!check_num(av))
 		return (0);
+	philos->dead = 0;
 	philos->nbr_meal = -1;
 	philos->nbr_philos = ft_atoi(av[1]);
 	philos->time_die = ft_atoi(av[2]);
@@ -63,37 +68,49 @@ int	usage(void)
 	return (1);
 }
 
+void	init_philo(t_philo *philo, t_philos *philos)
+{
+		pthread_mutex_init(&philo->eat, NULL);
+		philo->start = philos->start;
+		philo->output = &philos->output;
+		philo->dead_mutex = &philos->dead_mutex;
+		philo->nbr_meal = philos->nbr_meal;
+		philo->nbr_philos = philos->nbr_philos;
+		philo->time_die = philos->time_die;
+		philo->time_eat = philos->time_eat;
+		philo->time_sleep = philos->time_sleep;
+		philo->last_meal = 0;
+		philo->dead = &philos->dead;
+}
+
 void	cpy_philos(t_philos *philos)
 {
 	t_philo			*philo;
-	struct timeval	start;
 	unsigned int	i;
-	int 			dead;
 
 	i = 0;
-	dead = 0;
 	philo = malloc(sizeof(t_philo) * philos->nbr_philos);
 	philo[0].fork_l = &philos->fork[philos->nbr_philos - 1];
-	gettimeofday(&start, NULL);
 	while (i < philos->nbr_philos)
 	{
+		init_philo(&philo[i], philos);
 		if (i != 0)
 			philo[i].fork_l = &philos->fork[i - 1];
-		philo[i].start = to_milisecond(start.tv_sec, start.tv_usec, 0);
 		philo[i].fork_r = &philos->fork[i];
-		philo[i].output = &philos->output;
-		philo[i].nbr_meal = philos->nbr_meal;
-		philo[i].nbr_philos = philos->nbr_philos;
-		philo[i].time_die = philos->time_die;
-		philo[i].time_eat = philos->time_eat;
-		philo[i].time_sleep = philos->time_sleep;
-		philo[i].last_meal = philo[i].start;
 		philo[i].index = i + 1;
-		philo[i].dead = &dead;
 		i++;
 	}
-	create_philo(philo);
+	philos->philo = philo;
+	create_philo(philo, philos);
+	i = 0;
+	while (i < philo[i].nbr_philos)
+	{
+		pthread_mutex_destroy(&philo[i].eat);
+		i++;
+	}
+	free(philo);
 }
+
 
 int	main(int ac, char **av)
 {
@@ -108,6 +125,16 @@ int	main(int ac, char **av)
 		pthread_mutex_init(&philos.fork[i], NULL);
 		i++;
 	}
+	pthread_mutex_init(&philos.dead_mutex, NULL);
 	pthread_mutex_init(&philos.output, NULL);
 	cpy_philos(&philos);
+	i = 0;
+	while(i < philos.nbr_philos)
+	{
+		pthread_mutex_destroy(&philos.fork[i]);
+		i++;
+	}
+	pthread_mutex_destroy(&philos.output);
+	pthread_mutex_destroy(&philos.dead_mutex);
+	free(philos.fork);
 }
